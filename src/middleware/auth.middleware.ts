@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthService } from '../modules/auth/services/auth.service';
+import { AuthService } from '@/modules/auth/services/auth.service';
 import { JWTPayload } from '../modules/auth/types/auth.types';
 import { isAppError } from '../lib/errors/app-error';
 
