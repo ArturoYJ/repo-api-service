@@ -35,6 +35,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
     res.status(200).json({ user: loginResponse.usuario, message: 'Inicio de sesión exitoso' });
   } catch (error) {
+    console.error('Error en login:', error);
     if (isAppError(error)) {
       res.status(error.statusCode).json({ error: error.message });
       return;
