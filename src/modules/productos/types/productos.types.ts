@@ -15,19 +15,16 @@ export interface ProductoConVariantes extends ProductoMaestro {
 export interface CreateProductoInput {
   sku?: string;
   nombre: string;
-  proveedor?: string;
 }
 
 export interface UpdateProductoInput {
   sku?: string;
   nombre?: string;
-  proveedor?: string;
 }
 
 export interface CreateProductoCompletoInput {
   sku?: string;
   nombre: string;
-  proveedor?: string;
   variantes?: CreateVarianteInput[];
 }
 

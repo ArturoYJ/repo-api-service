@@ -12,16 +12,12 @@ export class ProductosRepository {
 
   static async create(data: CreateProductoInput): Promise<ProductoMaestro> {
     const query = `
-      INSERT INTO productos_maestros (sku, nombre, proveedor)
-      VALUES ($1, $2, $3)
+      INSERT INTO productos_maestros (sku, nombre)
+      VALUES ($1, $2)
       RETURNING id_producto_maestro, sku, nombre, proveedor, created_at;
     `;
     try {
-      const { rows } = await db.query(query, [
-        data.sku,
-        data.nombre,
-        data.proveedor ?? null,
-      ]);
+      const { rows } = await db.query(query, [data.sku, data.nombre]);
       return rows[0];
     } catch (error: unknown) {
       if (error instanceof Error && 'code' in error && (error as { code: string }).code === '23505') {
@@ -78,10 +74,6 @@ export class ProductosRepository {
       campos.push(`sku = $${paramIndex++}`);
       valores.push(data.sku);
     }
-    if (data.proveedor !== undefined) {
-      campos.push(`proveedor = $${paramIndex++}`);
-      valores.push(data.proveedor);
-    }
 
     if (campos.length === 0) {
       throw new ValidationError('No se proporcionaron campos para actualizar');
@@ -135,8 +127,8 @@ export class ProductosRepository {
       await client.query(`
         DELETE FROM inventario_sucursal 
         WHERE id_variante IN (
-        SELECT id_variante FROM variantes WHERE id_producto_maestro = $1
-      )`, [id]);
+          SELECT id_variante FROM variantes WHERE id_producto_maestro = $1
+        )`, [id]);
       await client.query(`DELETE FROM variantes WHERE id_producto_maestro = $1;`, [id]);
       await client.query(`DELETE FROM productos_maestros WHERE id_producto_maestro = $1;`, [id]);
       await client.query('COMMIT');
