@@ -12,12 +12,12 @@ export class ProductosRepository {
 
   static async create(data: CreateProductoInput): Promise<ProductoMaestro> {
     const query = `
-      INSERT INTO productos_maestros (sku, nombre)
-      VALUES ($1, $2)
+      INSERT INTO productos_maestros (sku, nombre, proveedor)
+      VALUES ($1, $2, $3)
       RETURNING id_producto_maestro, sku, nombre, proveedor, created_at;
     `;
     try {
-      const { rows } = await db.query(query, [data.sku, data.nombre]);
+      const { rows } = await db.query(query, [data.sku, data.nombre, data.proveedor ?? null]);
       return rows[0];
     } catch (error: unknown) {
       if (error instanceof Error && 'code' in error && (error as { code: string }).code === '23505') {

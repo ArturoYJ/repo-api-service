@@ -15,6 +15,7 @@ export interface ProductoConVariantes extends ProductoMaestro {
 export interface CreateProductoInput {
   sku?: string;
   nombre: string;
+  proveedor?: string | null;
 }
 
 export interface UpdateProductoInput {
