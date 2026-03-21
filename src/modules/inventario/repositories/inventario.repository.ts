@@ -4,7 +4,6 @@ import { ConflictError, NotFoundError, ValidationError } from '@/lib/errors/app-
 
 export class InventarioRepository {
 
-  // Obtiene el inventario completo de una sucursal con detalles de producto
   static async findBySucursal(id_sucursal: number): Promise<InventarioDetallado[]> {
     const query = `
       SELECT 
@@ -23,7 +22,6 @@ export class InventarioRepository {
     return rows;
   }
 
-  // Obtiene el registro de inventario específico para una variante en una sucursal
   static async findByVarianteAndSucursal(id_variante: number, id_sucursal: number): Promise<InventarioSucursal | null> {
     const query = `
       SELECT id_inventario, id_variante, id_sucursal, stock_actual, updated_at
@@ -34,7 +32,19 @@ export class InventarioRepository {
     return rows[0] || null;
   }
 
-  // Crea un registro de inventario inicial para una variante en una sucursal
+  static async findByVariante(id_variante: number): Promise<(InventarioSucursal & { nombre_sucursal: string })[]> {
+    const query = `
+      SELECT i.id_inventario, i.id_variante, i.id_sucursal, i.stock_actual, i.updated_at,
+             s.nombre_lugar as nombre_sucursal
+      FROM inventario_sucursal i
+      JOIN sucursales s ON i.id_sucursal = s.id_sucursal
+      WHERE i.id_variante = $1
+      ORDER BY s.nombre_lugar;
+    `;
+    const { rows } = await db.query(query, [id_variante]);
+    return rows;
+  }
+
   static async create(data: CreateInventarioInput): Promise<InventarioSucursal> {
     const query = `
       INSERT INTO inventario_sucursal (id_variante, id_sucursal, stock_actual)
@@ -52,14 +62,11 @@ export class InventarioRepository {
     }
   }
 
-  // Actualiza el stock sumando o restando la cantidad proporcionada
-  // Valida que el stock resultante no sea negativo
   static async updateStock(id_variante: number, id_sucursal: number, cantidad: number): Promise<InventarioSucursal> {
     const client = await db.getClient();
     try {
       await client.query('BEGIN');
 
-      // 1. Obtener stock actual con bloqueo fila para evitar condiciones de carrera
       const checkQuery = `
         SELECT stock_actual 
         FROM inventario_sucursal 
@@ -79,14 +86,13 @@ export class InventarioRepository {
         throw new ValidationError(`Stock insuficiente. Actual: ${currentStock}, Solicitado: ${Math.abs(cantidad)}`);
       }
 
-      // 2. Actualizar stock
       const updateQuery = `
         UPDATE inventario_sucursal
         SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP
         WHERE id_variante = $2 AND id_sucursal = $3
         RETURNING id_inventario, id_variante, id_sucursal, stock_actual, updated_at;
       `;
-      const { rows: updatedRows } = await client.query(updateQuery, [newStock, id_variante, id_sucursal]); // Corrected values array
+      const { rows: updatedRows } = await client.query(updateQuery, [newStock, id_variante, id_sucursal]);
       
       await client.query('COMMIT');
       return updatedRows[0];
@@ -98,7 +104,6 @@ export class InventarioRepository {
     }
   }
 
-  // Verifica si hay suficiente stock para una operación
   static async checkStock(id_variante: number, id_sucursal: number, cantidad: number): Promise<boolean> {
     const query = `
       SELECT stock_actual 
@@ -111,7 +116,6 @@ export class InventarioRepository {
     return rows[0].stock_actual >= cantidad;
   }
 
-  // Obtiene la cantidad actual de stock
   static async getStockActual(id_variante: number, id_sucursal: number): Promise<number> {
     const query = `
       SELECT stock_actual 
@@ -121,11 +125,7 @@ export class InventarioRepository {
     const { rows } = await db.query(query, [id_variante, id_sucursal]);
     
     if (rows.length === 0) {
-        // Podríamos considerar que si no existe registro, el stock es 0, o lanzar error.
-        // Dado que es un módulo de inventario estricto, mejor retornar 0 si no existe fila,
-        // pero validando primero si la variante/sucursal existen es costoso. 
-        // Asumiremos 0.
-        return 0;
+      return 0;
     }
     return rows[0].stock_actual;
   }
@@ -146,25 +146,23 @@ export class InventarioRepository {
   }
 
   static async findById(id_inventario: number): Promise<InventarioSucursal | null> {
-  const query = `
-    SELECT id_inventario, id_variante, id_sucursal, stock_actual, updated_at
-    FROM inventario_sucursal
-    WHERE id_inventario = $1;
-  `;
-  const { rows } = await db.query(query, [id_inventario]);
-  return rows[0] || null;
-}
+    const query = `
+      SELECT id_inventario, id_variante, id_sucursal, stock_actual, updated_at
+      FROM inventario_sucursal
+      WHERE id_inventario = $1;
+    `;
+    const { rows } = await db.query(query, [id_inventario]);
+    return rows[0] || null;
+  }
 
-static async updateStockById(id_inventario: number, stock_actual: number): Promise<InventarioSucursal | null> {
-  const query = `
-    UPDATE inventario_sucursal
-    SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP
-    WHERE id_inventario = $2
-    RETURNING id_inventario, id_variante, id_sucursal, stock_actual, updated_at;
-  `;
-  const { rows } = await db.query(query, [stock_actual, id_inventario]);
-  return rows[0] || null;
+  static async updateStockById(id_inventario: number, stock_actual: number): Promise<InventarioSucursal | null> {
+    const query = `
+      UPDATE inventario_sucursal
+      SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id_inventario = $2
+      RETURNING id_inventario, id_variante, id_sucursal, stock_actual, updated_at;
+    `;
+    const { rows } = await db.query(query, [stock_actual, id_inventario]);
+    return rows[0] || null;
+  }
 }
-  
-}
-

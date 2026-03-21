@@ -13,6 +13,7 @@ variantesRouter.use(requireAuth);
 
 const agregarVarianteSchema = varianteSchema.extend({
   id_producto_maestro: z.coerce.number().int().positive(),
+  fecha_compra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional().nullable(),
 });
 
 const updateVarianteSchema = z.object({
@@ -22,6 +23,7 @@ const updateVarianteSchema = z.object({
   color: z.string().max(50).nullable().optional(),
   codigo_barras: z.string().min(3).max(100).optional(),
   sku_variante: z.string().min(3).max(100).optional(),
+  fecha_compra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').nullable().optional(),
 });
 
 variantesRouter.post('/', async (req: AuthRequest, res: Response) => {

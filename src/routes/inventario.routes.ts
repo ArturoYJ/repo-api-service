@@ -56,6 +56,18 @@ inventarioRouter.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+inventarioRouter.get('/variante/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const idValidation = idSchema.safeParse(req.params.id);
+    if (!idValidation.success) { res.status(400).json({ error: 'ID de variante inválido' }); return; }
+    const registros = await InventarioRepository.findByVariante(idValidation.data);
+    res.status(200).json({ data: registros });
+  } catch (error) {
+    if (isAppError(error)) { res.status(error.statusCode).json({ error: error.message }); return; }
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 inventarioRouter.post('/ajuste', async (req: AuthRequest, res: Response) => {
   try {
     const resultado = ajusteInventarioApiSchema.safeParse(req.body);

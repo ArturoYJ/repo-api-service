@@ -20,10 +20,10 @@ export class VariantesRepository {
       await client.query('BEGIN');
 
       const varianteQuery = `
-        INSERT INTO variantes (id_producto_maestro, sku_variante, codigo_barras, modelo, color, precio_adquisicion, precio_venta_etiqueta)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO variantes (id_producto_maestro, sku_variante, codigo_barras, modelo, color, precio_adquisicion, precio_venta_etiqueta, fecha_compra)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id_variante, id_producto_maestro, sku_variante, codigo_barras, modelo, color,
-                  precio_adquisicion, precio_venta_etiqueta, etiqueta_generada, created_at;
+                  precio_adquisicion, precio_venta_etiqueta, etiqueta_generada, fecha_compra, created_at;
       `;
       const { rows } = await client.query(varianteQuery, [
         idProductoMaestro,
@@ -33,6 +33,7 @@ export class VariantesRepository {
         data.color ?? null,
         data.precio_adquisicion,
         data.precio_venta_etiqueta,
+        data.fecha_compra ?? null,
       ]);
       const variante = rows[0];
 
@@ -62,7 +63,7 @@ export class VariantesRepository {
   static async findById(id: number): Promise<Variante | null> {
     const query = `
       SELECT id_variante, id_producto_maestro, sku_variante, codigo_barras, modelo, color,
-             precio_adquisicion, precio_venta_etiqueta, etiqueta_generada, created_at
+             precio_adquisicion, precio_venta_etiqueta, etiqueta_generada, fecha_compra, created_at
       FROM variantes
       WHERE id_variante = $1;
     `;
@@ -73,7 +74,7 @@ export class VariantesRepository {
   static async findByProductoMaestro(idProductoMaestro: number): Promise<Variante[]> {
     const query = `
       SELECT id_variante, id_producto_maestro, sku_variante, codigo_barras, modelo, color,
-             precio_adquisicion, precio_venta_etiqueta, etiqueta_generada, created_at
+             precio_adquisicion, precio_venta_etiqueta, etiqueta_generada, fecha_compra, created_at
       FROM variantes
       WHERE id_producto_maestro = $1
       ORDER BY id_variante;
@@ -107,6 +108,10 @@ export class VariantesRepository {
       campos.push(`precio_venta_etiqueta = $${paramIndex++}`);
       valores.push(data.precio_venta_etiqueta);
     }
+    if (data.fecha_compra !== undefined) {
+      campos.push(`fecha_compra = $${paramIndex++}`);
+      valores.push(data.fecha_compra ?? null);
+    }
 
     if (campos.length === 0) {
       throw new ValidationError('No se proporcionaron campos para actualizar');
@@ -118,7 +123,7 @@ export class VariantesRepository {
       SET ${campos.join(', ')}
       WHERE id_variante = $${paramIndex}
       RETURNING id_variante, id_producto_maestro, sku_variante, codigo_barras, modelo, color,
-                precio_adquisicion, precio_venta_etiqueta, etiqueta_generada, created_at;
+                precio_adquisicion, precio_venta_etiqueta, etiqueta_generada, fecha_compra, created_at;
     `;
 
     try {
