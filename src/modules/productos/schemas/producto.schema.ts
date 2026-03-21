@@ -17,13 +17,15 @@ export const varianteSchema = z.object({
 export const crearProductoMaestroSchema = z.object({
   sku: z.string().min(3, 'El SKU debe tener al menos 3 caracteres').max(50).optional(),
   nombre: z.string().min(2).max(150),
+  proveedor: z.string().max(150).optional().nullable(),
   variantes: z.array(varianteSchema).optional().default([]),
 });
 
 export const updateProductoSchema = z.object({
   sku: z.string().min(3, 'El SKU debe tener al menos 3 caracteres').max(50).optional(),
   nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').max(150).optional(),
-}).refine((data) => data.sku !== undefined || data.nombre !== undefined, {
+  proveedor: z.string().max(150).optional().nullable(),
+}).refine((data) => data.sku !== undefined || data.nombre !== undefined || data.proveedor !== undefined, {
   message: 'Debe proporcionar al menos un campo para actualizar',
 });
 

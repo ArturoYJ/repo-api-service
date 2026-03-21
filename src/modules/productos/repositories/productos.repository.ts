@@ -12,12 +12,12 @@ export class ProductosRepository {
 
   static async create(data: CreateProductoInput): Promise<ProductoMaestro> {
     const query = `
-      INSERT INTO productos_maestros (sku, nombre)
-      VALUES ($1, $2)
-      RETURNING id_producto_maestro, sku, nombre, created_at;
+      INSERT INTO productos_maestros (sku, nombre, proveedor)
+      VALUES ($1, $2, $3)
+      RETURNING id_producto_maestro, sku, nombre, proveedor, created_at;
     `;
     try {
-      const { rows } = await db.query(query, [data.sku, data.nombre]);
+      const { rows } = await db.query(query, [data.sku, data.nombre, data.proveedor ?? null]);
       return rows[0];
     } catch (error: unknown) {
       if (error instanceof Error && 'code' in error && (error as { code: string }).code === '23505') {
@@ -30,7 +30,7 @@ export class ProductosRepository {
   static async findAll(): Promise<ProductoConVariantes[]> {
     const query = `
       SELECT 
-        pm.id_producto_maestro, pm.sku, pm.nombre, pm.created_at,
+        pm.id_producto_maestro, pm.sku, pm.nombre, pm.proveedor, pm.created_at,
         v.id_variante, v.sku_variante, v.codigo_barras, v.modelo, v.color,
         v.precio_adquisicion, v.precio_venta_etiqueta,
         v.etiqueta_generada, v.created_at AS variante_created_at
@@ -45,7 +45,7 @@ export class ProductosRepository {
   static async findById(id: number): Promise<ProductoConVariantes | null> {
     const query = `
       SELECT 
-        pm.id_producto_maestro, pm.sku, pm.nombre, pm.created_at,
+        pm.id_producto_maestro, pm.sku, pm.nombre, pm.proveedor, pm.created_at,
         v.id_variante, v.sku_variante, v.codigo_barras, v.modelo, v.color,
         v.precio_adquisicion, v.precio_venta_etiqueta,
         v.etiqueta_generada, v.created_at AS variante_created_at
@@ -74,6 +74,10 @@ export class ProductosRepository {
       campos.push(`sku = $${paramIndex++}`);
       valores.push(data.sku);
     }
+    if (data.proveedor !== undefined) {
+      campos.push(`proveedor = $${paramIndex++}`);
+      valores.push(data.proveedor);
+    }
 
     if (campos.length === 0) {
       throw new ValidationError('No se proporcionaron campos para actualizar');
@@ -84,7 +88,7 @@ export class ProductosRepository {
       UPDATE productos_maestros
       SET ${campos.join(', ')}
       WHERE id_producto_maestro = $${paramIndex}
-      RETURNING id_producto_maestro, sku, nombre, created_at;
+      RETURNING id_producto_maestro, sku, nombre, proveedor, created_at;
     `;
 
     try {
@@ -127,8 +131,8 @@ export class ProductosRepository {
       await client.query(`
         DELETE FROM inventario_sucursal 
         WHERE id_variante IN (
-        SELECT id_variante FROM variantes WHERE id_producto_maestro = $1
-      )`, [id]);
+          SELECT id_variante FROM variantes WHERE id_producto_maestro = $1
+        )`, [id]);
       await client.query(`DELETE FROM variantes WHERE id_producto_maestro = $1;`, [id]);
       await client.query(`DELETE FROM productos_maestros WHERE id_producto_maestro = $1;`, [id]);
       await client.query('COMMIT');
@@ -151,6 +155,7 @@ export class ProductosRepository {
           id_producto_maestro: idProducto,
           sku: row.sku as string,
           nombre: row.nombre as string,
+          proveedor: row.proveedor as string | null,
           created_at: row.created_at as Date,
           variantes: [],
         });

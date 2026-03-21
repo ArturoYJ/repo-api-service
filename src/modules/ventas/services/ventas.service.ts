@@ -82,6 +82,9 @@ export class VentasService {
       };
     } catch (error) {
       await client.query('ROLLBACK');
+      if ((error as NodeJS.ErrnoException & { code?: string }).code === 'P0001') {
+        throw new ValidationError((error as Error).message);
+      }
       throw error;
     } finally {
       client.release();
