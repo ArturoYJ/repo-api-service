@@ -8,11 +8,11 @@ export interface Variante {
   precio_adquisicion: number;
   precio_venta_etiqueta: number;
   etiqueta_generada: boolean;
+  fecha_compra?: string | null;
   created_at: Date;
   sucursal?: string | null;
 }
 
-// DTOs de entrada
 export interface CreateVarianteInput {
   sku_variante?: string;
   codigo_barras?: string;
@@ -22,9 +22,9 @@ export interface CreateVarianteInput {
   precio_venta_etiqueta: number;
   sucursal_id: number;
   stock_inicial?: number;
+  fecha_compra?: string | null;
 }
 
-// DTOs para actualizar variante de producto
 export interface UpdateVarianteInput {
   sku_variante?: string;
   codigo_barras?: string;
@@ -32,6 +32,7 @@ export interface UpdateVarianteInput {
   color?: string | null;
   precio_adquisicion?: number;
   precio_venta_etiqueta?: number;
+  fecha_compra?: string | null;
 }
 
 export interface VarianteInfo {
