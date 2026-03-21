@@ -129,7 +129,12 @@ export class ProductosRepository {
     try {
       await client.query('BEGIN');
       await client.query(`
-        DELETE FROM inventario_sucursal 
+        DELETE FROM ventas_bajas
+        WHERE id_variante IN (
+          SELECT id_variante FROM variantes WHERE id_producto_maestro = $1
+        )`, [id]);
+      await client.query(`
+        DELETE FROM inventario_sucursal
         WHERE id_variante IN (
           SELECT id_variante FROM variantes WHERE id_producto_maestro = $1
         )`, [id]);
