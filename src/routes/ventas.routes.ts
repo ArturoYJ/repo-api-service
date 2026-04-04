@@ -29,6 +29,28 @@ ventasRouter.post('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+ventasRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    if (isNaN(id)) {
+      res.status(400).json({ error: 'ID de transacción inválido' });
+      return;
+    }
+
+    const resultado = await VentasService.revertirVenta(id);
+    res.status(200).json({
+      message: 'Venta revertida exitosamente. El stock ha sido devuelto al inventario.',
+      data: resultado,
+    });
+  } catch (error) {
+    if (isAppError(error)) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: 'Error al intentar revertir la venta' });
+  }
+});
+
 ventasRouter.get('/historial', async (req: AuthRequest, res: Response) => {
   try {
     const rawParams = {
