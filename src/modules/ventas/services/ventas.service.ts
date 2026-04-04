@@ -132,4 +132,54 @@ export class VentasService {
       utilidad_total: Number(r.utilidad_total),
     }));
   }
+
+  static async revertirVenta(id_transaccion: number): Promise<{ id_transaccion: number; stock_actualizado: number }> {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Obtener datos de la transacción para revertir el stock
+      const { rows: ventaRows } = await client.query(
+        `SELECT id_variante, id_sucursal, cantidad FROM ventas_bajas WHERE id_transaccion = $1 FOR UPDATE;`,
+        [id_transaccion]
+      );
+
+      if (ventaRows.length === 0) {
+        throw new NotFoundError('No se encontró la transacción de venta especificada');
+      }
+
+      const { id_variante, id_sucursal, cantidad } = ventaRows[0];
+
+      // 2. Devolver el stock a la sucursal correspondiente
+      const updateStockQuery = `
+        UPDATE inventario_sucursal
+        SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id_variante = $2 AND id_sucursal = $3
+        RETURNING stock_actual;
+      `;
+      const { rows: stockRows } = await client.query(updateStockQuery, [cantidad, id_variante, id_sucursal]);
+
+      if (stockRows.length === 0) {
+        throw new ValidationError('No se pudo actualizar el stock del inventario');
+      }
+
+      // 3. Eliminar el registro de la venta
+      await client.query(`DELETE FROM ventas_bajas WHERE id_transaccion = $1;`, [id_transaccion]);
+
+      await client.query('COMMIT');
+
+      // 4. Refrescar vistas materializadas de ranking
+      await refreshRankingViews();
+
+      return {
+        id_transaccion,
+        stock_actualizado: stockRows[0].stock_actual,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
