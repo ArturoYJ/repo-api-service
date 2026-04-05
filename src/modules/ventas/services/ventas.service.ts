@@ -28,8 +28,6 @@ export class VentasService {
     try {
       await client.query('BEGIN');
 
-      // Verificar stock DENTRO de la transacción con bloqueo de fila (FOR UPDATE)
-      // para evitar condiciones de carrera al descontar stock concurrentemente.
       const { rows: inventarioRows } = await client.query(
         `SELECT stock_actual FROM inventario_sucursal
          WHERE id_variante = $1 AND id_sucursal = $2
@@ -47,7 +45,6 @@ export class VentasService {
         );
       }
 
-      // Registrar la venta
       const insertQuery = `
         INSERT INTO ventas_bajas (id_variante, id_sucursal, id_motivo, id_usuario, cantidad, precio_venta_final, fecha_hora)
         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
@@ -57,7 +54,6 @@ export class VentasService {
         id_variante, id_sucursal, id_motivo, id_usuario, cantidad, precio_venta_final,
       ]);
 
-      // Descontar stock atómicamente
       const updateQuery = `
         UPDATE inventario_sucursal
         SET stock_actual = stock_actual - $1, updated_at = CURRENT_TIMESTAMP
@@ -72,8 +68,6 @@ export class VentasService {
       }
 
       await client.query('COMMIT');
-
-      // Refrescar vistas materializadas de ranking después de cada venta
       await refreshRankingViews();
 
       return {
@@ -104,42 +98,6 @@ export class VentasService {
       return VentasRepository.findByDateRange(fecha_inicio, fecha_fin);
     }
     return VentasRepository.findAll();
-  }
-
-  static async revertirVenta(id_transaccion: number): Promise<void> {
-    const client = await db.getClient();
-    try {
-      await client.query('BEGIN');
-
-      const { rows } = await client.query(
-        `SELECT id_variante, id_sucursal, cantidad FROM ventas_bajas WHERE id_transaccion = $1 FOR UPDATE;`,
-        [id_transaccion]
-      );
-
-      if (rows.length === 0) {
-        throw new NotFoundError('Venta no encontrada');
-      }
-
-      const { id_variante, id_sucursal, cantidad } = rows[0];
-
-      await client.query(
-        `UPDATE inventario_sucursal
-         SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP
-         WHERE id_variante = $2 AND id_sucursal = $3;`,
-        [cantidad, id_variante, id_sucursal]
-      );
-
-      await client.query(`DELETE FROM ventas_bajas WHERE id_transaccion = $1;`, [id_transaccion]);
-
-      await client.query('COMMIT');
-
-      await refreshRankingViews();
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
   }
 
   static async calcularUtilidades(
@@ -174,7 +132,6 @@ export class VentasService {
     try {
       await client.query('BEGIN');
 
-      // 1. Obtener datos de la transacción para revertir el stock
       const { rows: ventaRows } = await client.query(
         `SELECT id_variante, id_sucursal, cantidad FROM ventas_bajas WHERE id_transaccion = $1 FOR UPDATE;`,
         [id_transaccion]
@@ -186,7 +143,6 @@ export class VentasService {
 
       const { id_variante, id_sucursal, cantidad } = ventaRows[0];
 
-      // 2. Devolver el stock a la sucursal correspondiente
       const updateStockQuery = `
         UPDATE inventario_sucursal
         SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP
@@ -199,12 +155,8 @@ export class VentasService {
         throw new ValidationError('No se pudo actualizar el stock del inventario');
       }
 
-      // 3. Eliminar el registro de la venta
       await client.query(`DELETE FROM ventas_bajas WHERE id_transaccion = $1;`, [id_transaccion]);
-
       await client.query('COMMIT');
-
-      // 4. Refrescar vistas materializadas de ranking
       await refreshRankingViews();
 
       return {
