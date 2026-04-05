@@ -4,6 +4,8 @@ import { UsuariosRepository } from '../modules/auth/repositories/usuarios.reposi
 import { loginSchema } from '../modules/auth/schemas/auth.schema';
 import { isAppError } from '../lib/errors/app-error';
 import { requireAuth, AuthRequest } from '../middleware/auth.middleware';
+import { registrarUsuarioSchema } from '../modules/auth/schemas/auth.schema';
+
 
 export const authRouter = Router();
 
@@ -64,6 +66,26 @@ authRouter.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
       res.status(error.statusCode).json({ error: error.message });
       return;
     }
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+authRouter.post('/register', async (req: Request, res: Response) => {
+  const validation = registrarUsuarioSchema.safeParse(req.body);
+  if (!validation.success) {
+    res.status(400).json({
+      error: 'Datos inválidos',
+      detalles: validation.error.issues.map(i => ({ campo: i.path.join('.'), mensaje: i.message })),
+    });
+    return;
+  }
+  try {
+    const { nombre, email, password, rol } = validation.data;
+    const passwordHash = await AuthService.hashPassword(password);
+    const usuario = await UsuariosRepository.create(nombre, email, passwordHash, rol);
+    res.status(201).json({ message: 'Usuario creado exitosamente', data: usuario });
+  } catch (error) {
+    if (isAppError(error)) { res.status(error.statusCode).json({ error: error.message }); return; }
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
