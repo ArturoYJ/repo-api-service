@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '@/modules/auth/services/auth.service';
+import { UsuariosRepository } from '@/modules/auth/repositories/usuarios.repository';
 import { JWTPayload } from '../modules/auth/types/auth.types';
 import { isAppError } from '../lib/errors/app-error';
 
@@ -7,7 +8,7 @@ export interface AuthRequest extends Request {
   user?: JWTPayload;
 }
 
-export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const token = req.cookies?.auth_token;
 
@@ -17,6 +18,13 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
     }
 
     const payload = AuthService.verifyToken(token);
+
+    const usuario = await UsuariosRepository.findById(payload.userId);
+    if (!usuario || !usuario.activo) {
+      res.status(401).json({ error: 'Usuario inactivo o no encontrado.' });
+      return;
+    }
+
     req.user = payload;
     next();
   } catch (error) {

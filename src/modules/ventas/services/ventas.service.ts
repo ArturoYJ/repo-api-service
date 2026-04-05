@@ -106,6 +106,42 @@ export class VentasService {
     return VentasRepository.findAll();
   }
 
+  static async revertirVenta(id_transaccion: number): Promise<void> {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      const { rows } = await client.query(
+        `SELECT id_variante, id_sucursal, cantidad FROM ventas_bajas WHERE id_transaccion = $1 FOR UPDATE;`,
+        [id_transaccion]
+      );
+
+      if (rows.length === 0) {
+        throw new NotFoundError('Venta no encontrada');
+      }
+
+      const { id_variante, id_sucursal, cantidad } = rows[0];
+
+      await client.query(
+        `UPDATE inventario_sucursal
+         SET stock_actual = stock_actual + $1, updated_at = CURRENT_TIMESTAMP
+         WHERE id_variante = $2 AND id_sucursal = $3;`,
+        [cantidad, id_variante, id_sucursal]
+      );
+
+      await client.query(`DELETE FROM ventas_bajas WHERE id_transaccion = $1;`, [id_transaccion]);
+
+      await client.query('COMMIT');
+
+      await refreshRankingViews();
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   static async calcularUtilidades(
     fecha_inicio: Date,
     fecha_fin: Date,

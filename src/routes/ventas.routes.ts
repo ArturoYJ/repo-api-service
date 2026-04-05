@@ -75,3 +75,22 @@ ventasRouter.get('/historial', async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
+
+ventasRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
+  if (req.user!.rol !== 'GERENTE' && req.user!.rol !== 'ADMIN') {
+    res.status(403).json({ error: 'No tienes permisos para revertir ventas' });
+    return;
+  }
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: 'ID de venta inválido' });
+      return;
+    }
+    await VentasService.revertirVenta(id);
+    res.status(200).json({ message: 'Venta revertida exitosamente' });
+  } catch (error) {
+    if (isAppError(error)) { res.status(error.statusCode).json({ error: error.message }); return; }
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});

@@ -1,10 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { AuthService } from '../modules/auth/services/auth.service';
 import { UsuariosRepository } from '../modules/auth/repositories/usuarios.repository';
-import { loginSchema } from '../modules/auth/schemas/auth.schema';
+import { loginSchema, registrarUsuarioSchema } from '../modules/auth/schemas/auth.schema';
 import { isAppError } from '../lib/errors/app-error';
 import { requireAuth, AuthRequest } from '../middleware/auth.middleware';
-import { registrarUsuarioSchema } from '../modules/auth/schemas/auth.schema';
 
 
 export const authRouter = Router();
@@ -30,7 +29,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     res.cookie('auth_token', loginResponse.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 1000,
       path: '/',
     });
@@ -70,12 +69,16 @@ authRouter.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-authRouter.post('/register', async (req: Request, res: Response) => {
+authRouter.post('/register', requireAuth, async (req: AuthRequest, res: Response) => {
+  if (req.user!.rol !== 'ADMIN') {
+    res.status(403).json({ error: 'Solo los administradores pueden crear usuarios' });
+    return;
+  }
   const validation = registrarUsuarioSchema.safeParse(req.body);
   if (!validation.success) {
     res.status(400).json({
       error: 'Datos inválidos',
-      detalles: validation.error.issues.map(i => ({ campo: i.path.join('.'), mensaje: i.message })),
+      detalles: validation.error.issues.map((i) => ({ campo: i.path.join('.'), mensaje: i.message })),
     });
     return;
   }
