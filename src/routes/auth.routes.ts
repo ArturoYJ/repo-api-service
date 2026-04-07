@@ -81,11 +81,7 @@ authRouter.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-authRouter.post('/register', requireAuth, async (req: AuthRequest, res: Response) => {
-  if (req.user!.rol !== 'ADMIN') {
-    res.status(403).json({ error: 'Solo los administradores pueden crear usuarios' });
-    return;
-  }
+authRouter.post('/register', async (req: Request, res: Response) => {
   const validation = registrarUsuarioSchema.safeParse(req.body);
   if (!validation.success) {
     res.status(400).json({
