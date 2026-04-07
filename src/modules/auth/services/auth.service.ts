@@ -1,65 +1,70 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { UsuariosRepository } from '../repositories/usuarios.repository';
-import { OtpService } from './otp.service';
-import { JWTPayload, PreAuthPayload, PreAuthResponse, UsuarioSinPassword } from '../types/auth.types';
-import { UnauthorizedError } from '@/lib/errors/app-error';
+import { JWTPayload, LoginResponse, UsuarioSinPassword } from '../types/auth.types';
+import { UnauthorizedError} from '@/lib/errors/app-error';
 
 export class AuthService {
-
+  
   private static getJwtSecret(): string {
     const secret = process.env.JWT_SECRET;
-    if (!secret) throw new Error('FATAL: JWT_SECRET no está definido');
+    if (!secret) {
+      throw new Error('FATAL: JWT_SECRET no está definido en las variables de entorno');
+    }
     return secret;
   }
 
   static async hashPassword(password: string): Promise<string> {
+    // 10 rondas de salt es el estándar de la industria. 
+    // Suficientemente lento para mitigar fuerza bruta, rápido para no bloquear el Event Loop.
     const salt = await bcrypt.genSalt(10);
     return bcrypt.hash(password, salt);
   }
 
-  static async login(email: string, passwordPlano: string): Promise<PreAuthResponse> {
+  static async login(email: string, passwordPlano: string): Promise<LoginResponse> {
+    // 1. Buscar usuario
     const usuario = await UsuariosRepository.findByEmail(email);
-    if (!usuario) throw new UnauthorizedError('Credenciales inválidas');
-
-    if (!usuario.activo) throw new UnauthorizedError('Esta cuenta ha sido desactivada. Contacte al administrador.');
-
-    const passwordCoincide = await bcrypt.compare(passwordPlano, usuario.password_hash);
-    if (!passwordCoincide) throw new UnauthorizedError('Credenciales inválidas');
-
-    await OtpService.sendOtp(usuario.id_usuario, usuario.email);
-
-    const prePayload: PreAuthPayload = { userId: usuario.id_usuario, email: usuario.email, pre: true };
-    const preToken = jwt.sign(prePayload, this.getJwtSecret(), { expiresIn: '5m' });
-
-    return { requires2fa: true, preToken };
-  }
-
-  static async verifyOtp(preToken: string, code: string): Promise<{ token: string; usuario: UsuarioSinPassword }> {
-    let payload: PreAuthPayload;
-    try {
-      payload = jwt.verify(preToken, this.getJwtSecret()) as PreAuthPayload;
-    } catch {
-      throw new UnauthorizedError('Sesión expirada. Inicia sesión nuevamente.');
+    if (!usuario) {
+      throw new UnauthorizedError('Credenciales inválidas'); 
     }
 
-    if (!payload.pre) throw new UnauthorizedError('Token inválido');
+    // 2. Verificar que el usuario no esté inactivo
+    if (!usuario.activo) {
+      throw new UnauthorizedError('Esta cuenta ha sido desactivada. Contacte al administrador.');
+    }
 
-    await OtpService.verifyOtp(payload.userId, code);
+    // 3. Comparación criptográfica
+    const passwordCoincide = await bcrypt.compare(passwordPlano, usuario.password_hash);
+    if (!passwordCoincide) {
+      throw new UnauthorizedError('Credenciales inválidas');
+    }
 
-    const usuario = await UsuariosRepository.findById(payload.userId);
-    if (!usuario) throw new UnauthorizedError('Usuario no encontrado');
+    // 4. Generación del JWT
+    const payload: JWTPayload = {
+      userId: usuario.id_usuario,
+      email: usuario.email,
+      rol: usuario.rol,
+    };
 
-    const jwtPayload: JWTPayload = { userId: usuario.id_usuario, email: usuario.email, rol: usuario.rol };
-    const token = jwt.sign(jwtPayload, this.getJwtSecret(), { expiresIn: '24h' });
+    const token = jwt.sign(payload, this.getJwtSecret(), {
+      expiresIn: '24h',
+    });
 
-    return { token, usuario };
+    // 5. Retornar omitiendo datos sensibles
+    const { password_hash, ...usuarioLimpio } = usuario;
+
+    return {
+      token,
+      usuario: usuarioLimpio,
+    };
   }
 
   static verifyToken(token: string): JWTPayload {
     try {
-      return jwt.verify(token, this.getJwtSecret()) as JWTPayload;
-    } catch {
+      const decodificado = jwt.verify(token, this.getJwtSecret()) as JWTPayload;
+      return decodificado;
+    } catch (error) {
+      console.error('JWT Verification failed:', error);
       throw new UnauthorizedError('Token inválido o expirado');
     }
   }
