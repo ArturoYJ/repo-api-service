@@ -16,7 +16,18 @@ export interface JWTPayload {
   rol: 'ADMIN' | 'GERENTE';
 }
 
+export interface PreAuthPayload {
+  userId: number;
+  email: string;
+  pre: true;
+}
+
 export interface LoginResponse {
   token: string;
   usuario: UsuarioSinPassword;
+}
+
+export interface PreAuthResponse {
+  requires2fa: true;
+  preToken: string;
 }
