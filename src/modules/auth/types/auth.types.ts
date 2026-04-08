@@ -1,9 +1,11 @@
+export type Rol = 'ADMIN' | 'VENDEDOR' | 'AUDITOR';
+
 export interface Usuario {
   id_usuario: number;
   nombre: string;
   email: string;
   password_hash: string;
-  rol: 'ADMIN' | 'GERENTE';
+  rol: Rol;
   activo: boolean;
   created_at: Date;
   totp_secret: string | null;
@@ -15,7 +17,7 @@ export type UsuarioSinPassword = Omit<Usuario, 'password_hash' | 'totp_secret'>;
 export interface JWTPayload {
   userId: number;
   email: string;
-  rol: 'ADMIN' | 'GERENTE';
+  rol: Rol;
 }
 
 export interface PreAuthPayload {
