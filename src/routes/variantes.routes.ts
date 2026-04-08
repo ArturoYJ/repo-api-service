@@ -5,7 +5,7 @@ import { VariantesRepository } from '../modules/productos/repositories/variantes
 import { varianteSchema } from '../modules/productos/schemas/producto.schema';
 import { idSchema } from '../lib/validations/common.schemas';
 import { isAppError } from '../lib/errors/app-error';
-import { requireAuth, AuthRequest } from '../middleware/auth.middleware';
+import { requireAuth, requireRole, AuthRequest } from '../middleware/auth.middleware';
 
 export const variantesRouter = Router();
 
@@ -26,7 +26,7 @@ const updateVarianteSchema = z.object({
   fecha_compra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').nullable().optional(),
 });
 
-variantesRouter.post('/', async (req: AuthRequest, res: Response) => {
+variantesRouter.post('/', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const validation = agregarVarianteSchema.safeParse(req.body);
     if (!validation.success) {
@@ -55,7 +55,7 @@ variantesRouter.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-variantesRouter.put('/:id', async (req: AuthRequest, res: Response) => {
+variantesRouter.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const idValidation = idSchema.safeParse(req.params.id);
     if (!idValidation.success) { res.status(400).json({ error: 'ID de variante inválido' }); return; }

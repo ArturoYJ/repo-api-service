@@ -3,7 +3,7 @@ import { ProductosService } from '../modules/productos/services/productos.servic
 import { crearProductoMaestroSchema, updateProductoSchema } from '../modules/productos/schemas/producto.schema';
 import { paginationSchema, idSchema } from '../lib/validations/common.schemas';
 import { isAppError } from '../lib/errors/app-error';
-import { requireAuth, AuthRequest } from '../middleware/auth.middleware';
+import { requireAuth, requireRole, AuthRequest } from '../middleware/auth.middleware';
 
 export const productosRouter = Router();
 
@@ -11,16 +11,11 @@ productosRouter.use(requireAuth);
 
 productosRouter.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const validation = paginationSchema.safeParse({
-      page: req.query.page,
-      limit: req.query.limit,
-    });
-
+    const validation = paginationSchema.safeParse({ page: req.query.page, limit: req.query.limit });
     if (!validation.success) {
       res.status(400).json({ error: 'Parámetros de paginación inválidos', detalles: validation.error.format() });
       return;
     }
-
     const { page, limit } = validation.data;
     const resultado = await ProductosService.getAllProductos(page, limit);
     res.status(200).json(resultado);
@@ -30,7 +25,7 @@ productosRouter.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-productosRouter.post('/', async (req: AuthRequest, res: Response) => {
+productosRouter.post('/', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const validation = crearProductoMaestroSchema.safeParse(req.body);
     if (!validation.success) {
@@ -60,7 +55,7 @@ productosRouter.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-productosRouter.put('/:id', async (req: AuthRequest, res: Response) => {
+productosRouter.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const idValidation = idSchema.safeParse(req.params.id);
     if (!idValidation.success) { res.status(400).json({ error: 'ID de producto inválido' }); return; }
@@ -80,7 +75,7 @@ productosRouter.put('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-productosRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
+productosRouter.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const idValidation = idSchema.safeParse(req.params.id);
     if (!idValidation.success) { res.status(400).json({ error: 'ID de producto inválido' }); return; }
