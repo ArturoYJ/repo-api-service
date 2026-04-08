@@ -6,7 +6,7 @@ import { SucursalesRepository } from '../modules/sucursales/repositories/sucursa
 import { ajusteInventarioApiSchema, MOTIVOS_VALIDOS } from '../modules/inventario/schemas/inventario.schema';
 import { idSchema } from '../lib/validations/common.schemas';
 import { isAppError, NotFoundError } from '../lib/errors/app-error';
-import { requireAuth, AuthRequest } from '../middleware/auth.middleware';
+import { requireAuth, requireRole, AuthRequest } from '../middleware/auth.middleware';
 
 export const inventarioRouter = Router();
 
@@ -40,12 +40,12 @@ inventarioRouter.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const rawSucursalId = req.query.sucursal_id as string | undefined;
     if (!rawSucursalId) {
-      res.status(400).json({ error: 'El parámetro sucursal_id es requerido. Uso: /api/v1/inventario?sucursal_id=1' });
+      res.status(400).json({ error: 'El parámetro sucursal_id es requerido' });
       return;
     }
     const idValidation = idSchema.safeParse(rawSucursalId);
     if (!idValidation.success) {
-      res.status(400).json({ error: `El parámetro sucursal_id debe ser un número entero positivo. Recibido: "${rawSucursalId}"` });
+      res.status(400).json({ error: `sucursal_id debe ser un número entero positivo` });
       return;
     }
     const inventario = await InventarioService.getInventarioBySucursal(idValidation.data);
@@ -68,7 +68,7 @@ inventarioRouter.get('/variante/:id', async (req: AuthRequest, res: Response) =>
   }
 });
 
-inventarioRouter.post('/ajuste', async (req: AuthRequest, res: Response) => {
+inventarioRouter.post('/ajuste', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const resultado = ajusteInventarioApiSchema.safeParse(req.body);
     if (!resultado.success) {
@@ -80,24 +80,16 @@ inventarioRouter.post('/ajuste', async (req: AuthRequest, res: Response) => {
     }
     const { id_variante, id_sucursal, cantidad, motivo } = resultado.data;
     const ajuste = await InventarioService.executarAjustePorCantidad({
-      id_variante,
-      id_sucursal,
-      cantidad,
-      motivo,
-      id_usuario: req.user!.userId,
+      id_variante, id_sucursal, cantidad, motivo, id_usuario: req.user!.userId,
     });
-    res.status(200).json({
-      message: 'Ajuste de inventario realizado correctamente',
-      stock_nuevo: ajuste.stock_nuevo,
-      id_transaccion: ajuste.id_transaccion,
-    });
+    res.status(200).json({ message: 'Ajuste realizado correctamente', stock_nuevo: ajuste.stock_nuevo, id_transaccion: ajuste.id_transaccion });
   } catch (error) {
     if (isAppError(error)) { res.status(error.statusCode).json({ error: error.message }); return; }
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 
-inventarioRouter.post('/baja', async (req: AuthRequest, res: Response) => {
+inventarioRouter.post('/baja', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const resultado = registrarBajaApiSchema.safeParse(req.body);
     if (!resultado.success) {
@@ -109,22 +101,11 @@ inventarioRouter.post('/baja', async (req: AuthRequest, res: Response) => {
     }
     const { id_variante, id_sucursal, motivo, cantidad, precio_venta_final } = resultado.data;
     const id_motivo = await InventarioRepository.findMotivoPorDescripcion(motivo);
-    if (id_motivo === null) {
-      throw new NotFoundError(`Motivo de transacción no encontrado: "${motivo}"`);
-    }
+    if (id_motivo === null) throw new NotFoundError(`Motivo no encontrado: "${motivo}"`);
     const baja = await InventarioService.registrarBaja({
-      id_variante,
-      id_sucursal,
-      id_motivo,
-      id_usuario: req.user!.userId,
-      cantidad,
-      precio_venta_final,
+      id_variante, id_sucursal, id_motivo, id_usuario: req.user!.userId, cantidad, precio_venta_final,
     });
-    res.status(200).json({
-      message: 'Baja de inventario registrada correctamente',
-      stock_resultante: baja.stock_resultante,
-      id_transaccion: baja.id_transaccion,
-    });
+    res.status(200).json({ message: 'Baja registrada correctamente', stock_resultante: baja.stock_resultante, id_transaccion: baja.id_transaccion });
   } catch (error) {
     if (isAppError(error)) { res.status(error.statusCode).json({ error: error.message }); return; }
     res.status(500).json({ error: 'Error interno del servidor' });
@@ -136,7 +117,7 @@ inventarioRouter.get('/:id', async (req: AuthRequest, res: Response) => {
     const idValidation = idSchema.safeParse(req.params.id);
     if (!idValidation.success) { res.status(400).json({ error: 'ID de inventario inválido' }); return; }
     const registro = await InventarioRepository.findById(idValidation.data);
-    if (!registro) { res.status(404).json({ error: 'Registro de inventario no encontrado' }); return; }
+    if (!registro) { res.status(404).json({ error: 'Registro no encontrado' }); return; }
     res.status(200).json({ data: registro });
   } catch (error) {
     if (isAppError(error)) { res.status(error.statusCode).json({ error: error.message }); return; }
@@ -144,7 +125,7 @@ inventarioRouter.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-inventarioRouter.put('/:id', async (req: AuthRequest, res: Response) => {
+inventarioRouter.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const idValidation = idSchema.safeParse(req.params.id);
     if (!idValidation.success) { res.status(400).json({ error: 'ID de inventario inválido' }); return; }
@@ -157,7 +138,7 @@ inventarioRouter.put('/:id', async (req: AuthRequest, res: Response) => {
       return;
     }
     const registro = await InventarioRepository.updateStockById(idValidation.data, validation.data.stock_actual);
-    if (!registro) { res.status(404).json({ error: 'Registro de inventario no encontrado' }); return; }
+    if (!registro) { res.status(404).json({ error: 'Registro no encontrado' }); return; }
     res.status(200).json({ data: registro });
   } catch (error) {
     if (isAppError(error)) { res.status(error.statusCode).json({ error: error.message }); return; }

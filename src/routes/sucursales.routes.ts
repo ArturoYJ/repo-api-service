@@ -4,7 +4,7 @@ import { createSucursalSchema, updateSucursalSchema } from '../modules/sucursale
 import { idSchema } from '../lib/validations/common.schemas';
 import { inventarioQuerySchema } from '../modules/inventario/schemas/inventario.schema';
 import { isAppError } from '../lib/errors/app-error';
-import { requireAuth, AuthRequest } from '../middleware/auth.middleware';
+import { requireAuth, requireRole, AuthRequest } from '../middleware/auth.middleware';
 
 export const sucursalesRouter = Router();
 
@@ -21,7 +21,7 @@ sucursalesRouter.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-sucursalesRouter.post('/', async (req: AuthRequest, res: Response) => {
+sucursalesRouter.post('/', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const validation = createSucursalSchema.safeParse(req.body);
     if (!validation.success) {
@@ -51,7 +51,7 @@ sucursalesRouter.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-sucursalesRouter.put('/:id', async (req: AuthRequest, res: Response) => {
+sucursalesRouter.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const idValidation = idSchema.safeParse(req.params.id);
     if (!idValidation.success) { res.status(400).json({ error: 'ID de sucursal inválido' }); return; }
@@ -71,7 +71,7 @@ sucursalesRouter.put('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-sucursalesRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
+sucursalesRouter.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const idValidation = idSchema.safeParse(req.params.id);
     if (!idValidation.success) { res.status(400).json({ error: 'ID de sucursal inválido' }); return; }
@@ -83,7 +83,7 @@ sucursalesRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-sucursalesRouter.patch('/:id/toggle', async (req: AuthRequest, res: Response) => {
+sucursalesRouter.patch('/:id/toggle', requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const idValidation = idSchema.safeParse(req.params.id);
     if (!idValidation.success) { res.status(400).json({ error: 'ID de sucursal inválido' }); return; }
@@ -99,17 +99,14 @@ sucursalesRouter.get('/:id/inventario', async (req: AuthRequest, res: Response) 
   try {
     const idValidation = idSchema.safeParse(req.params.id);
     if (!idValidation.success) { res.status(400).json({ error: 'ID de sucursal inválido' }); return; }
-
     const rawParams = {
       sku: req.query.sku as string | undefined,
       nombre: req.query.nombre as string | undefined,
       min_stock: req.query.min_stock as string | undefined,
       max_stock: req.query.max_stock as string | undefined,
     };
-
     const cleanParams = Object.fromEntries(Object.entries(rawParams).filter(([, v]) => v !== undefined));
     const validation = inventarioQuerySchema.safeParse(cleanParams);
-
     if (!validation.success) {
       res.status(400).json({
         error: 'Parámetros de consulta inválidos',
@@ -117,7 +114,6 @@ sucursalesRouter.get('/:id/inventario', async (req: AuthRequest, res: Response) 
       });
       return;
     }
-
     const inventario = await SucursalesService.getInventarioByIdWithFilters(idValidation.data, validation.data);
     res.status(200).json({ data: inventario, total: inventario.length });
   } catch (error) {

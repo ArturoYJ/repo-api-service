@@ -2,11 +2,12 @@ import { Router, Response } from 'express';
 import { VentasService } from '../modules/ventas/services/ventas.service';
 import { registrarVentaSchema, historialQuerySchema } from '../modules/ventas/schemas/venta.schema';
 import { isAppError } from '../lib/errors/app-error';
-import { requireAuth, AuthRequest } from '../middleware/auth.middleware';
+import { requireAuth, requireRole, AuthRequest } from '../middleware/auth.middleware';
 
 export const ventasRouter = Router();
 
 ventasRouter.use(requireAuth);
+ventasRouter.use(requireRole('ADMIN', 'VENDEDOR'));
 
 ventasRouter.post('/', async (req: AuthRequest, res: Response) => {
   try {
@@ -14,40 +15,15 @@ ventasRouter.post('/', async (req: AuthRequest, res: Response) => {
     if (!validation.success) {
       res.status(400).json({
         error: 'Datos de venta inválidos',
-        detalles: validation.error.issues.map((issue) => ({ campo: issue.path.join('.'), mensaje: issue.message })),
+        detalles: validation.error.issues.map((i) => ({ campo: i.path.join('.'), mensaje: i.message })),
       });
       return;
     }
-    const resultado = await VentasService.registrarVenta({
-      ...validation.data,
-      id_usuario: req.user!.userId,
-    });
+    const resultado = await VentasService.registrarVenta({ ...validation.data, id_usuario: req.user!.userId });
     res.status(201).json({ message: 'Venta registrada exitosamente', data: resultado });
   } catch (error) {
     if (isAppError(error)) { res.status(error.statusCode).json({ error: error.message }); return; }
     res.status(500).json({ error: 'Error interno del servidor' });
-  }
-});
-
-ventasRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
-  try {
-    const id = parseInt(req.params.id as string);
-    if (isNaN(id)) {
-      res.status(400).json({ error: 'ID de transacción inválido' });
-      return;
-    }
-
-    const resultado = await VentasService.revertirVenta(id);
-    res.status(200).json({
-      message: 'Venta revertida exitosamente. El stock ha sido devuelto al inventario.',
-      data: resultado,
-    });
-  } catch (error) {
-    if (isAppError(error)) {
-      res.status(error.statusCode).json({ error: error.message });
-      return;
-    }
-    res.status(500).json({ error: 'Error al intentar revertir la venta' });
   }
 });
 
@@ -62,8 +38,8 @@ ventasRouter.get('/historial', async (req: AuthRequest, res: Response) => {
     const validation = historialQuerySchema.safeParse(cleanParams);
     if (!validation.success) {
       res.status(400).json({
-        error: 'Parámetros de consulta inválidos',
-        detalles: validation.error.issues.map((issue) => ({ campo: issue.path.join('.'), mensaje: issue.message })),
+        error: 'Parámetros inválidos',
+        detalles: validation.error.issues.map((i) => ({ campo: i.path.join('.'), mensaje: i.message })),
       });
       return;
     }
@@ -77,20 +53,13 @@ ventasRouter.get('/historial', async (req: AuthRequest, res: Response) => {
 });
 
 ventasRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
-  if (req.user!.rol !== 'GERENTE' && req.user!.rol !== 'ADMIN') {
-    res.status(403).json({ error: 'No tienes permisos para revertir ventas' });
-    return;
-  }
   try {
     const id = parseInt(String(req.params.id), 10);
-    if (isNaN(id)) {
-      res.status(400).json({ error: 'ID de venta inválido' });
-      return;
-    }
-    await VentasService.revertirVenta(id);
-    res.status(200).json({ message: 'Venta revertida exitosamente' });
+    if (isNaN(id)) { res.status(400).json({ error: 'ID de transacción inválido' }); return; }
+    const resultado = await VentasService.revertirVenta(id);
+    res.status(200).json({ message: 'Venta revertida exitosamente. El stock ha sido devuelto al inventario.', data: resultado });
   } catch (error) {
     if (isAppError(error)) { res.status(error.statusCode).json({ error: error.message }); return; }
-    res.status(500).json({ error: 'Error interno del servidor' });
+    res.status(500).json({ error: 'Error al intentar revertir la venta' });
   }
 });
