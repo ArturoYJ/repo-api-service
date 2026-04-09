@@ -16,6 +16,8 @@ import { motivosRouter } from './routes/motivos.routes';
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+app.set('trust proxy', 1);
+
 app.use(helmet());
 
 app.use(cors({
