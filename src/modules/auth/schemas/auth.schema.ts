@@ -25,6 +25,17 @@ export const registrarUsuarioSchema = z.object({
   }),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('El formato del correo es inválido'),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Token requerido'),
+  password: passwordRules,
+});
+
 export type LoginDTO = z.infer<typeof loginSchema>;
 export type VerifyTotpDTO = z.infer<typeof verifyTotpSchema>;
 export type RegistrarUsuarioDTO = z.infer<typeof registrarUsuarioSchema>;
+export type ForgotPasswordDTO = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordDTO = z.infer<typeof resetPasswordSchema>;

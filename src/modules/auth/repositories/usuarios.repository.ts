@@ -57,4 +57,36 @@ export class UsuariosRepository {
       throw error;
     }
   }
+
+  static async saveResetToken(userId: number, token: string, expiresAt: Date): Promise<void> {
+    await db.query(
+      `UPDATE usuarios SET reset_token = $1, reset_token_expires_at = $2 WHERE id_usuario = $3`,
+      [token, expiresAt, userId]
+    );
+  }
+
+  static async findByResetToken(token: string): Promise<Usuario | null> {
+    const { rows } = await db.query(
+      `SELECT id_usuario, nombre, email, password_hash, rol, activo, created_at, totp_secret, totp_enabled
+       FROM usuarios
+       WHERE reset_token = $1
+         AND reset_token_expires_at > NOW()
+         AND activo = TRUE`,
+      [token]
+    );
+    return rows[0] || null;
+  }
+
+  static async updatePassword(userId: number, passwordHash: string): Promise<void> {
+    await db.query(
+      `UPDATE usuarios
+       SET password_hash = $1,
+           reset_token = NULL,
+           reset_token_expires_at = NULL,
+           totp_enabled = FALSE,
+           totp_secret = NULL
+       WHERE id_usuario = $2`,
+      [passwordHash, userId]
+    );
+  }
 }
