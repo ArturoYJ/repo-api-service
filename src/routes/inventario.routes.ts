@@ -78,9 +78,9 @@ inventarioRouter.post('/ajuste', requireRole('ADMIN'), async (req: AuthRequest, 
       });
       return;
     }
-    const { id_variante, id_sucursal, cantidad, motivo } = resultado.data;
+    const { id_variante, id_sucursal, cantidad, id_motivo } = resultado.data;
     const ajuste = await InventarioService.executarAjustePorCantidad({
-      id_variante, id_sucursal, cantidad, motivo, id_usuario: req.user!.userId,
+      id_variante, id_sucursal, cantidad, id_motivo, id_usuario: req.user!.userId,
     });
     res.status(200).json({ message: 'Ajuste realizado correctamente', stock_nuevo: ajuste.stock_nuevo, id_transaccion: ajuste.id_transaccion });
   } catch (error) {

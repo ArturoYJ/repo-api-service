@@ -46,9 +46,7 @@ export const ajusteInventarioApiSchema = z.object({
     .number()
     .int('La cantidad debe ser un número entero')
     .refine((v) => v !== 0, { message: 'La cantidad no puede ser cero' }),
-  motivo: z.enum(MOTIVOS_VALIDOS, {
-    error: `El motivo debe ser uno de los siguientes: ${MOTIVOS_VALIDOS.join(', ')}`,
-  }),
+  id_motivo: idSchema,
 });
 
 export type AjusteStockDTO = z.infer<typeof ajusteStockSchema>;

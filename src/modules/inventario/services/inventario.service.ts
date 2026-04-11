@@ -12,7 +12,7 @@ interface AjustePorCantidadInput {
   id_variante: number;
   id_sucursal: number;
   cantidad: number;
-  motivo: string;
+  id_motivo: number;
   id_usuario: number;
 }
 
@@ -156,16 +156,6 @@ export class InventarioService {
   }
 
   static async executarAjustePorCantidad(data: AjustePorCantidadInput): Promise<{ stock_nuevo: number; id_transaccion: number }> {
-    const { rows: motivoRows } = await db.query(
-      `SELECT id_motivo FROM motivos_transaccion WHERE descripcion = $1;`,
-      [data.motivo]
-    );
-
-    if (motivoRows.length === 0) {
-      throw new NotFoundError(`Motivo de transacción no encontrado: "${data.motivo}"`);
-    }
-    const id_motivo: number = motivoRows[0].id_motivo;
-
     const client = await db.getClient();
     try {
       await client.query('BEGIN');
@@ -203,7 +193,7 @@ export class InventarioService {
         `INSERT INTO ventas_bajas (id_variante, id_sucursal, id_motivo, id_usuario, cantidad, precio_venta_final)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id_transaccion;`,
-        [data.id_variante, data.id_sucursal, id_motivo, data.id_usuario, Math.abs(data.cantidad), 0]
+        [data.id_variante, data.id_sucursal, data.id_motivo, data.id_usuario, Math.abs(data.cantidad), 0]
       );
 
       await client.query('COMMIT');
