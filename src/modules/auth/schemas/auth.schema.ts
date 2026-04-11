@@ -20,9 +20,6 @@ export const registrarUsuarioSchema = z.object({
   nombre: z.string().min(2, 'El nombre es muy corto').max(100, 'El nombre es muy largo'),
   email: z.string().email('El formato del correo es inválido').max(150),
   password: passwordRules,
-  rol: z.enum(['ADMIN', 'VENDEDOR', 'AUDITOR'], {
-    error: 'Rol inválido. Debe ser ADMIN, VENDEDOR o AUDITOR',
-  }),
 });
 
 export const forgotPasswordSchema = z.object({

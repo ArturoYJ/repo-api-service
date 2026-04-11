@@ -11,7 +11,7 @@ export const authRouter = Router();
 const AUTH_COOKIE_OPTS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  sameSite: 'strict' as const,
   path: '/',
 };
 
@@ -87,9 +87,9 @@ authRouter.post('/register', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { nombre, email, password, rol } = validation.data;
+    const { nombre, email, password } = validation.data;
     const passwordHash = await AuthService.hashPassword(password);
-    const usuario = await UsuariosRepository.create(nombre, email, passwordHash, rol);
+    const usuario = await UsuariosRepository.create(nombre, email, passwordHash);
     res.status(201).json({ message: 'Usuario creado exitosamente', data: usuario });
   } catch (error) {
     if (isAppError(error)) { res.status(error.statusCode).json({ error: error.message }); return; }

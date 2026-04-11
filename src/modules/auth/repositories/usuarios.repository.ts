@@ -39,15 +39,14 @@ export class UsuariosRepository {
   static async create(
     nombre: string,
     email: string,
-    passwordHash: string,
-    rol: string
+    passwordHash: string
   ): Promise<UsuarioSinPassword> {
     try {
       const { rows } = await db.query(
         `INSERT INTO usuarios (nombre, email, password_hash, rol)
-         VALUES ($1, $2, $3, $4)
+         VALUES ($1, $2, $3, 'GERENTE')
          RETURNING id_usuario, nombre, email, rol, activo, created_at, totp_enabled`,
-        [nombre, email, passwordHash, rol]
+        [nombre, email, passwordHash]
       );
       return rows[0];
     } catch (error: unknown) {

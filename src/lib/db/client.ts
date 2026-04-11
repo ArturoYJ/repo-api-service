@@ -8,9 +8,7 @@ const pool = new Pool({
   connectionTimeoutMillis: 3000,
 });
 
-pool.on('error', (err) => {
-  console.error('Error inesperado de PostgreSQL en un cliente inactivo', err);
-});
+pool.on('error', () => {});
 
 export const db = {
   query: (text: string, params?: unknown[]) => pool.query(text, params),

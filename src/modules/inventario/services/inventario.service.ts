@@ -11,7 +11,7 @@ import { ValidationError, NotFoundError } from '@/lib/errors/app-error';
 interface AjustePorCantidadInput {
   id_variante: number;
   id_sucursal: number;
-  cantidad: number; // positivo = entrada, negativo = salida
+  cantidad: number;
   motivo: string;
   id_usuario: number;
 }
@@ -156,30 +156,27 @@ export class InventarioService {
   }
 
   static async executarAjustePorCantidad(data: AjustePorCantidadInput): Promise<{ stock_nuevo: number; id_transaccion: number }> {
-    // 1. Buscar id_motivo por descripcion (fuera de la transacción, es solo lectura)
-    const motivoQuery = `
-      SELECT id_motivo FROM motivos_transaccion WHERE descripcion = $1;
-    `;
-    const { rows: motivoRows } = await db.query(motivoQuery, [data.motivo]);
+    const { rows: motivoRows } = await db.query(
+      `SELECT id_motivo FROM motivos_transaccion WHERE descripcion = $1;`,
+      [data.motivo]
+    );
 
     if (motivoRows.length === 0) {
       throw new NotFoundError(`Motivo de transacción no encontrado: "${data.motivo}"`);
     }
     const id_motivo: number = motivoRows[0].id_motivo;
 
-    // 2. Transacción atómica: actualizar stock + registrar auditoría
     const client = await db.getClient();
     try {
       await client.query('BEGIN');
 
-      // 2a. Obtener stock actual con bloqueo de fila (FOR UPDATE) para evitar race conditions
-      const checkQuery = `
-        SELECT stock_actual
-        FROM inventario_sucursal
-        WHERE id_variante = $1 AND id_sucursal = $2
-        FOR UPDATE;
-      `;
-      const { rows: stockRows } = await client.query(checkQuery, [data.id_variante, data.id_sucursal]);
+      const { rows: stockRows } = await client.query(
+        `SELECT stock_actual
+         FROM inventario_sucursal
+         WHERE id_variante = $1 AND id_sucursal = $2
+         FOR UPDATE;`,
+        [data.id_variante, data.id_sucursal]
+      );
 
       if (stockRows.length === 0) {
         throw new NotFoundError('Registro de inventario no encontrado');
@@ -194,39 +191,22 @@ export class InventarioService {
         );
       }
 
-      // 2b. Actualizar stock
-      const updateQuery = `
-        UPDATE inventario_sucursal
-        SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP
-        WHERE id_variante = $2 AND id_sucursal = $3
-        RETURNING stock_actual;
-      `;
-      const { rows: updatedRows } = await client.query(updateQuery, [newStock, data.id_variante, data.id_sucursal]);
+      const { rows: updatedRows } = await client.query(
+        `UPDATE inventario_sucursal
+         SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE id_variante = $2 AND id_sucursal = $3
+         RETURNING stock_actual;`,
+        [newStock, data.id_variante, data.id_sucursal]
+      );
 
-      // 2c. Registrar la operación en ventas_bajas para auditoría
-      const cantidadAbsoluta = Math.abs(data.cantidad);
-      const transaccionQuery = `
-        INSERT INTO ventas_bajas (id_variante, id_sucursal, id_motivo, id_usuario, cantidad, precio_venta_final)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id_transaccion;
-      `;
-      const { rows: transRows } = await client.query(transaccionQuery, [
-        data.id_variante,
-        data.id_sucursal,
-        id_motivo,
-        data.id_usuario,
-        cantidadAbsoluta,
-        0,
-      ]);
+      const { rows: transRows } = await client.query(
+        `INSERT INTO ventas_bajas (id_variante, id_sucursal, id_motivo, id_usuario, cantidad, precio_venta_final)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id_transaccion;`,
+        [data.id_variante, data.id_sucursal, id_motivo, data.id_usuario, Math.abs(data.cantidad), 0]
+      );
 
       await client.query('COMMIT');
-
-      const tipo = data.cantidad > 0 ? 'ENTRADA' : 'SALIDA';
-      console.info(
-        `[AUDITORIA] INVENTARIO_${tipo} | variante=${data.id_variante} sucursal=${data.id_sucursal} ` +
-        `cantidad=${data.cantidad} motivo="${data.motivo}" usuario=${data.id_usuario} ` +
-        `stock_nuevo=${updatedRows[0].stock_actual} transaccion=${transRows[0].id_transaccion}`
-      );
 
       return {
         stock_nuevo: updatedRows[0].stock_actual,

@@ -1,75 +1,91 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { UsuariosRepository } from '../repositories/usuarios.repository';
-import { TotpService } from './totp.service';
-import { JWTPayload, PreAuthPayload, PreAuthResponse, UsuarioSinPassword } from '../types/auth.types';
-import { UnauthorizedError } from '@/lib/errors/app-error';
+import { Router, Request, Response } from 'express';
+import { AuthService } from '../modules/auth/services/auth.service';
+import { UsuariosRepository } from '../modules/auth/repositories/usuarios.repository';
+import { loginSchema, verifyTotpSchema } from '../modules/auth/schemas/auth.schema';
+import { isAppError } from '../lib/errors/app-error';
+import { requireAuth, AuthRequest } from '../middleware/auth.middleware';
 
-export class AuthService {
+export const authRouter = Router();
 
-  private static getJwtSecret(): string {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) throw new Error('FATAL: JWT_SECRET no está definido');
-    return secret;
-  }
-
-  static async hashPassword(password: string): Promise<string> {
-    const salt = await bcrypt.genSalt(10);
-    return bcrypt.hash(password, salt);
-  }
-
-  static async login(email: string, passwordPlano: string): Promise<PreAuthResponse> {
-    const usuario = await UsuariosRepository.findByEmail(email);
-    if (!usuario) throw new UnauthorizedError('Credenciales inválidas');
-    if (!usuario.activo) throw new UnauthorizedError('Esta cuenta ha sido desactivada. Contacte al administrador.');
-
-    const passwordCoincide = await bcrypt.compare(passwordPlano, usuario.password_hash);
-    if (!passwordCoincide) throw new UnauthorizedError('Credenciales inválidas');
-
-    const prePayload: PreAuthPayload = { userId: usuario.id_usuario, email: usuario.email, pre: true };
-    const preToken = jwt.sign(prePayload, this.getJwtSecret(), { expiresIn: '5m' });
-
-    if (!usuario.totp_enabled) {
-      const { secret, otpauthUrl } = TotpService.generateSecret(usuario.email);
-      await UsuariosRepository.saveTotpSecret(usuario.id_usuario, secret);
-      const qrDataUrl = await TotpService.generateQrDataUrl(otpauthUrl);
-      return { preToken, requires2fa: true, isNewSetup: true, qrDataUrl };
+authRouter.post('/login', async (req: Request, res: Response) => {
+  try {
+    const resultado = loginSchema.safeParse(req.body);
+    if (!resultado.success) {
+      res.status(400).json({
+        error: 'Datos de entrada inválidos',
+        detalles: resultado.error.issues.map((issue) => ({
+          campo: issue.path.join('.'),
+          mensaje: issue.message,
+        })),
+      });
+      return;
     }
 
-    return { preToken, requires2fa: true, isNewSetup: false };
-  }
-
-  static async verifyTotp(preToken: string, code: string): Promise<{ token: string; usuario: UsuarioSinPassword }> {
-    let payload: PreAuthPayload;
-    try {
-      payload = jwt.verify(preToken, this.getJwtSecret()) as PreAuthPayload;
-    } catch {
-      throw new UnauthorizedError('Sesión expirada. Inicia sesión nuevamente.');
+    const { email, password } = resultado.data;
+    const preAuthResponse = await AuthService.login(email, password);
+    res.status(200).json(preAuthResponse);
+  } catch (error) {
+    if (isAppError(error)) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
     }
-    if (!payload.pre) throw new UnauthorizedError('Token inválido');
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
 
-    const usuario = await UsuariosRepository.findByEmail(payload.email);
-    if (!usuario || !usuario.totp_secret) throw new UnauthorizedError('Usuario no encontrado');
-
-    const valido = TotpService.verifyToken(usuario.totp_secret, code);
-    if (!valido) throw new UnauthorizedError('Código incorrecto');
-
-    if (!usuario.totp_enabled) {
-      await UsuariosRepository.enableTotp(usuario.id_usuario);
+authRouter.post('/verify-totp', async (req: Request, res: Response) => {
+  try {
+    const resultado = verifyTotpSchema.safeParse(req.body);
+    if (!resultado.success) {
+      res.status(400).json({
+        error: 'Datos de entrada inválidos',
+        detalles: resultado.error.issues.map((issue) => ({
+          campo: issue.path.join('.'),
+          mensaje: issue.message,
+        })),
+      });
+      return;
     }
 
-    const jwtPayload: JWTPayload = { userId: usuario.id_usuario, email: usuario.email, rol: usuario.rol };
-    const token = jwt.sign(jwtPayload, this.getJwtSecret(), { expiresIn: '24h' });
+    const { preToken, code } = resultado.data;
+    const { token, usuario } = await AuthService.verifyTotp(preToken, code);
 
-    const { password_hash, totp_secret, ...usuarioLimpio } = usuario;
-    return { token, usuario: usuarioLimpio };
-  }
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 24 * 1000,
+      path: '/',
+    });
 
-  static verifyToken(token: string): JWTPayload {
-    try {
-      return jwt.verify(token, this.getJwtSecret()) as JWTPayload;
-    } catch {
-      throw new UnauthorizedError('Token inválido o expirado');
+    res.status(200).json({ user: usuario, message: 'Inicio de sesión exitoso' });
+  } catch (error) {
+    if (isAppError(error)) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
     }
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
-}
+});
+
+authRouter.post('/logout', (_req: Request, res: Response) => {
+  res.clearCookie('auth_token', { path: '/' });
+  res.status(200).json({ message: 'Sesión cerrada' });
+});
+
+authRouter.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const usuario = await UsuariosRepository.findById(req.user!.userId);
+    if (!usuario) {
+      res.status(404).json({ error: 'Usuario no encontrado' });
+      return;
+    }
+    res.status(200).json({ usuario });
+  } catch (error) {
+    if (isAppError(error)) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
