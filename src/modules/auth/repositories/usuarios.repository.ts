@@ -44,7 +44,7 @@ export class UsuariosRepository {
     try {
       const { rows } = await db.query(
         `INSERT INTO usuarios (nombre, email, password_hash, rol)
-         VALUES ($1, $2, $3, 'GERENTE')
+         VALUES ($1, $2, $3, 'VENDEDOR')
          RETURNING id_usuario, nombre, email, rol, activo, created_at, totp_enabled`,
         [nombre, email, passwordHash]
       );
